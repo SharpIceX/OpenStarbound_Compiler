@@ -1,0 +1,11 @@
+{
+	"name": "FontCompletion",
+	"friendlyName": "Font Completion",
+	"description": "字体补全",
+	"author": "SharpIce",
+	"version": "1.0",
+	"priority": 9999,
+	"includes": [
+		"SChinese"
+	]
+}
