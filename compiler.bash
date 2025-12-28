@@ -21,9 +21,28 @@ export OBJCOPY="/usr/bin/llvm-objcopy"
 export OBJDUMP="/usr/bin/llvm-objdump"
 
 # 编译参数
-export CFLAGS="-O3 -march=native -mtune=native -funroll-loops -fvectorize -ffast-math -fno-omit-frame-pointer -mprefer-vector-width=256 -pipe -g"
-export CXXFLAGS="-O3 -march=native -mtune=native -funroll-loops -fvectorize -ffast-math -fno-omit-frame-pointer -mprefer-vector-width=256 -D_GLIBCXX_USE_CXX11_ABI=1 -fno-finite-math-only -Wno-nan-infinity-disabled -std=c++20 -pipe -g"
-export LDFLAGS="-flto=full -fuse-ld=lld -Wl,--gc-sections -lmimalloc -s"
+export CFLAGS="-O3 -march=native -mtune=native \
+  -funroll-loops -fvectorize \
+  -ffast-math \
+    -fno-finite-math-only \
+    -fno-unsafe-math-optimizations \
+  -fno-omit-frame-pointer -g3 -gdwarf-5 \
+  -fstack-protector-strong \
+  -pipe"
+
+export CXXFLAGS="-O3 -march=native -mtune=native \
+  -funroll-loops -fvectorize \
+  -ffast-math \
+    -fno-finite-math-only \
+    -fno-unsafe-math-optimizations \
+  -fno-omit-frame-pointer -g3 -gdwarf-5 \
+  -fstack-protector-strong \
+  -D_GLIBCXX_USE_CXX11_ABI=1 \
+  -std=c++20 -pipe"
+
+export LDFLAGS="-flto=full -fuse-ld=lld \
+  -Wl,--gc-sections \
+  -lmimalloc"
 
 echo "清理存储库..."
 git -C "$SCRIPT_DIR/source/OpenStarbound" checkout . || true
@@ -115,9 +134,9 @@ cp -r "$SCRIPT_DIR/source/Avali-Triage-zh-CN-Patch/"* "$SCRIPT_DIR/obj/Avali-Tri
 "$SCRIPT_DIR/dist/linux/asset_packer" "$SCRIPT_DIR/obj/Avali-Triage-zh-CN-Patch" "$SCRIPT_DIR/dist/modules/Avali-Triage-zh-CN-Patch.pak"
 
 echo  "回收空间..."
-git -C "$SCRIPT_DIR/source/OpenStarbound" gc --aggressive || true
-git -C "$SCRIPT_DIR/source/Starbound-Chinese" gc --aggressive || true
-git -C "$SCRIPT_DIR/mods/Avali" gc --aggressive || true
-git -C "$SCRIPT_DIR/mods/Avali-Triage-zh-CN-Patch" gc --aggressive || true
-git -C "$SCRIPT_DIR/source/LxgwWenKai" gc --aggressive || true
+git -C "$SCRIPT_DIR/source/OpenStarbound" gc || true
+git -C "$SCRIPT_DIR/source/Starbound-Chinese" gc || true
+git -C "$SCRIPT_DIR/mods/Avali" gc || true
+git -C "$SCRIPT_DIR/mods/Avali-Triage-zh-CN-Patch" gc || true
+git -C "$SCRIPT_DIR/source/LxgwWenKai" gc || true
 rm -rf "$SCRIPT_DIR/obj" || true
