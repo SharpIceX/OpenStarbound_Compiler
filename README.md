@@ -4,14 +4,11 @@
 
 在编译前，请确保系统已安装以下依赖（Arch Linux）：
 
-- base-devel
-- git
-- cmake
-- boost
-- sdl2
-- ninja
-- woff2
-- ccache（需要已配置，或重构建脚本以移除对 ccache 的依赖）
+```bash
+pacman -S base-devel git cmake ninja clang llvm lld boost sdl2 glew woff2 ccache mimalloc
+```
+
+- ccache（需要已配置，或修改构建脚本移除对 ccache 的依赖）
 - vcpkg（需要已配置）
 
 如果您是刚开始编译，请运行`./init.bash`以初始化子模块和下载依赖。

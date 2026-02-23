@@ -21,28 +21,25 @@ export OBJCOPY="/usr/bin/llvm-objcopy"
 export OBJDUMP="/usr/bin/llvm-objdump"
 
 # 编译参数
-export CFLAGS="-O3 -march=native -mtune=native \
-  -funroll-loops -fvectorize \
-  -ffast-math \
-    -fno-finite-math-only \
-    -fno-unsafe-math-optimizations \
-  -fno-omit-frame-pointer -g3 -gdwarf-5 \
-  -fstack-protector-strong \
+COMPILER_ARGS="-O3 -march=native -mtune=native \
+  -flto=thin \
+  -fstrict-aliasing -fstrict-vtable-pointers \
+  -fomit-frame-pointer \
+  -fno-plt \
   -pipe"
 
-export CXXFLAGS="-O3 -march=native -mtune=native \
-  -funroll-loops -fvectorize \
-  -ffast-math \
-    -fno-finite-math-only \
-    -fno-unsafe-math-optimizations \
-  -fno-omit-frame-pointer -g3 -gdwarf-5 \
-  -fstack-protector-strong \
-  -D_GLIBCXX_USE_CXX11_ABI=1 \
-  -std=c++20 -pipe"
+DISABLE_ARGS="-Wno-nan-infinity-disabled"
 
-export LDFLAGS="-flto=full -fuse-ld=lld \
+export CFLAGS="$COMPILER_ARGS $DISABLE_ARGS"
+export CXXFLAGS="$COMPILER_ARGS $DISABLE_ARGS -std=c++20 -D_GLIBCXX_USE_CXX11_ABI=1"
+
+export LDFLAGS="-flto=thin -fuse-ld=lld \
   -Wl,--gc-sections \
+  -Wl,--icf=all \
+  -Wl,-O2 \
   -lmimalloc"
+
+export VCPKG_KEEP_ENV_VARS="CFLAGS;CXXFLAGS;LDFLAGS"
 
 echo "清理存储库..."
 git -C "$SCRIPT_DIR/source/OpenStarbound" checkout . || true
@@ -136,7 +133,7 @@ cp -r "$SCRIPT_DIR/source/Avali-Triage-zh-CN-Patch/"* "$SCRIPT_DIR/obj/Avali-Tri
 echo  "回收空间..."
 git -C "$SCRIPT_DIR/source/OpenStarbound" gc || true
 git -C "$SCRIPT_DIR/source/Starbound-Chinese" gc || true
-git -C "$SCRIPT_DIR/mods/Avali" gc || true
-git -C "$SCRIPT_DIR/mods/Avali-Triage-zh-CN-Patch" gc || true
+git -C "$SCRIPT_DIR/source/Avali" gc || true
+git -C "$SCRIPT_DIR/source/Avali-Triage-zh-CN-Patch" gc || true
 git -C "$SCRIPT_DIR/source/LxgwWenKai" gc || true
 rm -rf "$SCRIPT_DIR/obj" || true
