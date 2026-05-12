@@ -2,138 +2,156 @@
 
 set -euo pipefail
 
-# 版本
-OpenStarbound_Version="v0.1.14"
-StarboundChinese_Version="UTC-241105-1953"
-LxgwWenKai_Version="v1.521"
-StarboundDirectory="$HOME/.local/share/Steam/steamapps/common/Starbound/" # Steam 上 Starbound 的安装目录
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)" # 当前目录
+steam_StarboundDirectory="$HOME/.local/share/Steam/steamapps/common/Starbound/" # Steam 上 Starbound 的安装目录
 
-# 编译和链接器等
-export VCPKG_FORCE_SYSTEM_BINARIES=1
-export CC="/usr/bin/clang"
-export CXX="/usr/bin/clang++"
-export LD="/usr/bin/ld.lld"
-export AR="/usr/bin/llvm-ar"
-export NM="/usr/bin/llvm-nm"
-export RANLIB="/usr/bin/llvm-ranlib"
-export OBJCOPY="/usr/bin/llvm-objcopy"
-export OBJDUMP="/usr/bin/llvm-objdump"
+# # 仓库依赖
+deps_OpenStarbound=(
+    "https://github.com/OpenStarbound/OpenStarbound.git"
+    "713d5444ffce6b1e1b1cfa6848690922d9c62c23"
+    "$SCRIPT_DIR/source/OpenStarbound"
+)
+
+deps_StarboundChineseMod=(
+    "https://github.com/sffxzzp/Starbound-Chinese.git"
+    "UTC-241105-1953"
+    "$SCRIPT_DIR/source/Starbound-Chinese"
+)
+
+deps_AvaliMod=(
+    "https://github.com/Avali-Triage-Team/Avali.git"
+    "0c1f8ac51e00a08be76556a0519a3aec11a31e3e"
+    "$SCRIPT_DIR/source/Avali"
+)
+
+deps_AvaliModChineseMod=(
+    "https://github.com/Catoverflow/Avali-Triage-zh-CN-Patch.git"
+    "a266b0ae55f45b782e48d3f3df454ba0c99bf3a2"
+    "$SCRIPT_DIR/source/Avali-Triage-zh-CN-Patch"
+)
+
+# # 加载系统的 makepkg 配置
+# shellcheck disable=SC1091
+[[ -f /etc/makepkg.conf ]] && source "/etc/makepkg.conf"
+if [[ -d /etc/makepkg.conf.d ]]; then
+    for conf in /etc/makepkg.conf.d/*.conf; do
+        # shellcheck disable=SC1090
+        [[ -f "$conf" ]] && source "$conf"
+    done
+fi
+
+# # 加载用户的 makepkg 配置
+USER_PACMAN_CONF="${XDG_CONFIG_HOME:-$HOME/.config}/pacman/makepkg.conf"
+if [[ -f "$USER_PACMAN_CONF" ]]; then
+    # shellcheck disable=SC1090
+    source "$USER_PACMAN_CONF"
+fi
+
+sync_repo() {
+    local repo_url="$1"
+    local version="$2"
+    local repo_path="$3"
+
+    echo ">>> 正在同步：$repo_url @ $version"
+
+    if [[ ! -d "$repo_path/.git" ]]; then
+		echo ">>>> 初始化：$repo_path"
+
+        rm -rf "$repo_path"
+		mkdir -p "$(dirname "$repo_path")"
+        git init "$repo_path" --quiet
+        git -C "$repo_path" remote add origin "$repo_url"
+    fi
+
+	# 清理
+    git -C "$repo_path" clean -ffdx --quiet
+    git -C "$repo_path" reset --hard HEAD --quiet 2>/dev/null || true
+
+	# 同步
+    git -C "$repo_path" fetch origin "$version" --quiet || { echo "错误：无法获取版本 $version"; exit 1; }
+    git -C "$repo_path" reset --hard FETCH_HEAD --quiet || { echo "错误：重置失败"; exit 1; }
+
+    # 回收
+    git -C "$repo_path" gc --prune=now --quiet
+}
+
+pack_asset() {
+    local src="$1"
+    local dst="$2"
+    local packer="$SCRIPT_DIR/dist/linux/asset_packer"
+
+    [[ -x "$packer" ]] || { echo "错误：找不到「$packer」打包工具"; exit 1; }
+
+    [[ -d "$src" ]] || { echo "错误：「$src」目录不存在"; exit 1; }
+
+    "$packer" "$src" "$dst" || { echo "错误：「$src」打包失败"; exit 1; }
+}
 
 # 编译参数
-COMPILER_ARGS="-O3 -march=native -mtune=native \
-  -flto=thin \
-  -fstrict-aliasing -fstrict-vtable-pointers \
-  -fomit-frame-pointer \
-  -fno-plt \
-  -pipe"
+TOOLCHAIN_ARGS="--gcc-install-dir=/usr/lib/gcc/x86_64-pc-linux-gnu/14.3.1"
 
-DISABLE_ARGS="-Wno-nan-infinity-disabled"
+EXTRA_COMPILER_ARGS="-fstrict-vtable-pointers"
+DISABLE_ARGS="-Wno-nan-infinity-disabled -Wno-error=incompatible-pointer-types-discards-qualifiers"
 
-export CFLAGS="$COMPILER_ARGS $DISABLE_ARGS"
-export CXXFLAGS="$COMPILER_ARGS $DISABLE_ARGS -std=c++20 -D_GLIBCXX_USE_CXX11_ABI=1"
+export CFLAGS="${CFLAGS:-} ${TOOLCHAIN_ARGS} ${EXTRA_COMPILER_ARGS} ${DISABLE_ARGS}"
+export CXXFLAGS="${CXXFLAGS:-} ${TOOLCHAIN_ARGS} ${EXTRA_COMPILER_ARGS} ${DISABLE_ARGS} -std=c++20 -D_GLIBCXX_USE_CXX11_ABI=1"
+export LDFLAGS="${LDFLAGS:-} ${TOOLCHAIN_ARGS} -Wl,--gc-sections -Wl,--icf=all"
 
-export LDFLAGS="-flto=thin -fuse-ld=lld \
-  -Wl,--gc-sections \
-  -Wl,--icf=all \
-  -Wl,-O2 \
-  -lmimalloc"
-
+# VcPkg
+export VCPKG_FORCE_SYSTEM_BINARIES=1
 export VCPKG_KEEP_ENV_VARS="CFLAGS;CXXFLAGS;LDFLAGS"
 
-echo "清理存储库..."
-git -C "$SCRIPT_DIR/source/OpenStarbound" checkout . || true
-git -C "$SCRIPT_DIR/source/OpenStarbound" clean -fdx || true
+NPROC=${NPROC:-$(nproc)}
 
-git -C "$SCRIPT_DIR/source/Starbound-Chinese" checkout . || true
-git -C "$SCRIPT_DIR/source/Starbound-Chinese" clean -fdx || true
+echo "> 同步存储库..."
+sync_repo "${deps_AvaliMod[@]}"
+sync_repo "${deps_OpenStarbound[@]}"
+sync_repo "${deps_StarboundChineseMod[@]}"
+sync_repo "${deps_AvaliModChineseMod[@]}"
 
-git -C "$SCRIPT_DIR/source/LxgwWenKai" checkout . || true
-git -C "$SCRIPT_DIR/source/LxgwWenKai" clean -fdx || true
+echo "> 清理先前的编译结果"
+rm -rf "$SCRIPT_DIR"/{obj,dist}
 
-git -C "$SCRIPT_DIR/source/Avali" checkout . || true
-git -C "$SCRIPT_DIR/source/Avali" clean -fdx || true
+# # 创建目录
+mkdir -p "$SCRIPT_DIR/dist/"{linux,modules}
 
-git -C "$SCRIPT_DIR/source/Avali-Triage-zh-CN-Patch" checkout . || true
-git -C "$SCRIPT_DIR/source/Avali-Triage-zh-CN-Patch" clean -fdx || true
-
-echo "拉取更新..."
-git -C "$SCRIPT_DIR/source/OpenStarbound" fetch --depth=1 origin "$OpenStarbound_Version"
-git -C "$SCRIPT_DIR/source/OpenStarbound" reset --hard FETCH_HEAD || true
-
-git -C "$SCRIPT_DIR/source/Starbound-Chinese" fetch --depth=1 origin "$StarboundChinese_Version"
-git -C "$SCRIPT_DIR/source/Starbound-Chinese" reset --hard FETCH_HEAD || true
-
-git -C "$SCRIPT_DIR/source/LxgwWenKai" fetch --depth=1 origin "$LxgwWenKai_Version"
-git -C "$SCRIPT_DIR/source/LxgwWenKai" reset --hard FETCH_HEAD || true
-
-git -C "$SCRIPT_DIR/source/Avali" fetch --depth=1 origin master
-git -C "$SCRIPT_DIR/source/Avali" reset --hard FETCH_HEAD || true
-
-git -C "$SCRIPT_DIR/source/Avali-Triage-zh-CN-Patch" fetch --depth=1 origin master
-git -C "$SCRIPT_DIR/source/Avali-Triage-zh-CN-Patch" reset --hard FETCH_HEAD || true
-
-echo "清理先前的编译结果..."
-rm -rf "$SCRIPT_DIR/obj" || true
-rm -rf "$SCRIPT_DIR/dist" || true
-
-# 创建目录
-mkdir -p "$SCRIPT_DIR/dist/linux" "$SCRIPT_DIR/dist/modules"
-
-echo "初始化 OpenStarbound 构建配置..."
-cmake --preset linux-release-clang \
-    -S "$SCRIPT_DIR/source/OpenStarbound/source" \
-    -B "$SCRIPT_DIR/obj/OpenStarbound" \
-    -DCMAKE_C_FLAGS="$CFLAGS" \
-    -DCMAKE_CXX_FLAGS="$CXXFLAGS" \
-    -DCMAKE_EXE_LINKER_FLAGS="$LDFLAGS" \
-    -DCMAKE_C_COMPILER_LAUNCHER="/usr/bin/ccache" \
-    -DCMAKE_CXX_COMPILER_LAUNCHER="/usr/bin/ccache" \
+echo "> 初始化 OpenStarbound 构建配置"
+CMAKE_OPTS=(
+    --preset "linux-release-clang"
+    -S "$SCRIPT_DIR/source/OpenStarbound/source"
+    -B "$SCRIPT_DIR/obj/OpenStarbound"
+    -DCMAKE_C_FLAGS="$CFLAGS"
+    -DCMAKE_CXX_FLAGS="$CXXFLAGS"
+    -DCMAKE_EXE_LINKER_FLAGS="$LDFLAGS"
+	-DCMAKE_C_COMPILER_LAUNCHER="ccache"
+	-DCMAKE_CXX_COMPILER_LAUNCHER="ccache"
     -DCMAKE_VERBOSE_MAKEFILE=OFF
+)
+cmake "${CMAKE_OPTS[@]}"
 
-echo "编译 OpenStarbound..."
-cmake --build "$SCRIPT_DIR/obj/OpenStarbound" --config Release -- -j"$(nproc)"
+echo ">编译 OpenStarbound 使用「$NPROC」核心"
+export LDFLAGS="$LDFLAGS -lmimalloc"
+cmake --build "$SCRIPT_DIR/obj/OpenStarbound" --config Release --parallel "$NPROC"
 
-echo "复制 Starbound 编译结果..."
+echo "> 复制 OpenStarbound 编译产物"
 cp -r "$SCRIPT_DIR/source/OpenStarbound/dist/"* "$SCRIPT_DIR/dist/linux/"
 cp "$SCRIPT_DIR/source/OpenStarbound/lib/linux/"*.so "$SCRIPT_DIR/dist/linux/"
 cp "$SCRIPT_DIR/source/OpenStarbound/scripts/steam_appid.txt" "$SCRIPT_DIR/dist/linux/"
-cp -r "$StarboundDirectory/assets/" "$SCRIPT_DIR/dist/" # 运行时资源
+cp -r "$steam_StarboundDirectory/assets/" "$SCRIPT_DIR/dist/" # 运行时资源
 cp -r "$SCRIPT_DIR/assets/"* "$SCRIPT_DIR/dist/" # Steam 上的游戏资源
 
 # 设置权限
 chmod +x "$SCRIPT_DIR/dist/linux/starbound"
 chmod +x "$SCRIPT_DIR/dist/linux/asset_packer"
 
-echo "打包游戏资源..."
-"$SCRIPT_DIR/dist/linux/asset_packer" "$SCRIPT_DIR/source/OpenStarbound/assets/opensb" "$SCRIPT_DIR/dist/assets/opensb.pak"
+# 打包资源
+echo "> 打包游戏模块"
+pack_asset "$SCRIPT_DIR/source/Avali" 						"$SCRIPT_DIR/dist/modules/Avali.pak"
+pack_asset "$SCRIPT_DIR/source/OpenStarbound/assets/opensb" "$SCRIPT_DIR/dist/assets/opensb.pak"
+pack_asset "$SCRIPT_DIR/source/Starbound-Chinese" 			"$SCRIPT_DIR/dist/modules/Starbound-Chinese.pak"
+pack_asset "$SCRIPT_DIR/source/Avali-Triage-zh-CN-Patch" 	"$SCRIPT_DIR/dist/modules/Avali-Triage-zh-CN-Patch.pak"
 
-echo "打包简体中文语言模块..."
-mkdir -p "$SCRIPT_DIR/obj/Starbound-Chinese"
-cp -r "$SCRIPT_DIR/source/Starbound-Chinese/"* "$SCRIPT_DIR/obj/Starbound-Chinese/"
-"$SCRIPT_DIR/dist/linux/asset_packer" "$SCRIPT_DIR/obj/Starbound-Chinese" "$SCRIPT_DIR/dist/modules/Starbound-Chinese.pak"
-
-echo "打包字体模块..."
-mkdir -p "$SCRIPT_DIR/obj/fonts/fonts"
-cp -r "$SCRIPT_DIR/mods/fonts/"* "$SCRIPT_DIR/obj/fonts/"
-woff2_compress "$SCRIPT_DIR/source/LxgwWenKai/fonts/TTF/LXGWWenKai-Medium.ttf"
-mv "$SCRIPT_DIR/source/LxgwWenKai/fonts/TTF/LXGWWenKai-Medium.woff2" "$SCRIPT_DIR/obj/fonts/fonts/LXGWWenKai-Medium.woff2"
-"$SCRIPT_DIR/dist/linux/asset_packer" "$SCRIPT_DIR/obj/fonts" "$SCRIPT_DIR/dist/modules/Fonts.pak"
-
-echo "打包 Avali 物种模块..."
-mkdir -p "$SCRIPT_DIR/obj/Avali"
-cp -r "$SCRIPT_DIR/source/Avali/"* "$SCRIPT_DIR/obj/Avali/"
-"$SCRIPT_DIR/dist/linux/asset_packer" "$SCRIPT_DIR/obj/Avali" "$SCRIPT_DIR/dist/modules/Avali.pak"
-
-echo "打包 Avali 中文补丁模块..."
-mkdir -p "$SCRIPT_DIR/obj/Avali-Triage-zh-CN-Patch"
-cp -r "$SCRIPT_DIR/source/Avali-Triage-zh-CN-Patch/"* "$SCRIPT_DIR/obj/Avali-Triage-zh-CN-Patch/"
-"$SCRIPT_DIR/dist/linux/asset_packer" "$SCRIPT_DIR/obj/Avali-Triage-zh-CN-Patch" "$SCRIPT_DIR/dist/modules/Avali-Triage-zh-CN-Patch.pak"
-
-echo  "回收空间..."
-git -C "$SCRIPT_DIR/source/OpenStarbound" gc || true
-git -C "$SCRIPT_DIR/source/Starbound-Chinese" gc || true
-git -C "$SCRIPT_DIR/source/Avali" gc || true
-git -C "$SCRIPT_DIR/source/Avali-Triage-zh-CN-Patch" gc || true
-git -C "$SCRIPT_DIR/source/LxgwWenKai" gc || true
+echo "> 清理中间结果"
 rm -rf "$SCRIPT_DIR/obj" || true
+
+echo "> 完成 <"
