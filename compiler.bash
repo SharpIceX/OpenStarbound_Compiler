@@ -8,7 +8,7 @@ steam_StarboundDirectory="$HOME/.local/share/Steam/steamapps/common/Starbound/" 
 # # 仓库依赖
 deps_OpenStarbound=(
     "https://github.com/OpenStarbound/OpenStarbound.git"
-    "713d5444ffce6b1e1b1cfa6848690922d9c62c23"
+    "038a8d4eab64fc87f78131224ea712a459eaf4e7"
     "$SCRIPT_DIR/source/OpenStarbound"
 )
 
