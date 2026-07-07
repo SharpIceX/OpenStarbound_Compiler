@@ -80,12 +80,11 @@ export CXX=clang++
 
 # 编译参数
 TOOLCHAIN_ARGS="--gcc-install-dir=/usr/lib/gcc/x86_64-pc-linux-gnu/14.3.1"
-
 EXTRA_COMPILER_ARGS="-fstrict-vtable-pointers"
 DISABLE_ARGS="-Wno-nan-infinity-disabled -Wno-error=incompatible-pointer-types-discards-qualifiers"
 
 export CFLAGS="${CFLAGS:-} ${TOOLCHAIN_ARGS} ${EXTRA_COMPILER_ARGS} ${DISABLE_ARGS}"
-export CXXFLAGS="${CXXFLAGS:-} ${TOOLCHAIN_ARGS} ${EXTRA_COMPILER_ARGS} ${DISABLE_ARGS} -std=c++20 -D_GLIBCXX_USE_CXX11_ABI=1"
+export CXXFLAGS="${CXXFLAGS:-} ${TOOLCHAIN_ARGS} ${EXTRA_COMPILER_ARGS} ${DISABLE_ARGS} -std=c++20 -D_GLIBCXX_USE_CXX11_ABI=1 -U_GLIBCXX_ASSERTIONS"
 export LDFLAGS="${LDFLAGS:-} ${TOOLCHAIN_ARGS} -Wl,--gc-sections -Wl,--icf=all"
 
 # VcPkg
