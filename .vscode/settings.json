@@ -1,7 +1,3 @@
 {
-	"files.associations": {
-		"*.config": "json",
-		"_metadata": "json",
-		"*.config.patch": "json"
-	}
+	"cmake.ignoreCMakeListsMissing": true
 }

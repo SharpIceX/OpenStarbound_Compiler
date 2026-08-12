@@ -8,26 +8,15 @@ steam_StarboundDirectory="$HOME/.local/share/Steam/steamapps/common/Starbound/" 
 # # 仓库依赖
 deps_OpenStarbound=(
     "https://github.com/OpenStarbound/OpenStarbound.git"
-    "038a8d4eab64fc87f78131224ea712a459eaf4e7"
+    "0287e9c5a9ca56b0e64ec580ea40d7442f3cba54"
     "$SCRIPT_DIR/source/OpenStarbound"
 )
 
-# # 加载系统的 makepkg 配置
-# shellcheck disable=SC1091
-[[ -f /etc/makepkg.conf ]] && source "/etc/makepkg.conf"
-if [[ -d /etc/makepkg.conf.d ]]; then
-    for conf in /etc/makepkg.conf.d/*.conf; do
-        # shellcheck disable=SC1090
-        [[ -f "$conf" ]] && source "$conf"
-    done
-fi
-
-# # 加载用户的 makepkg 配置
-USER_PACMAN_CONF="${XDG_CONFIG_HOME:-$HOME/.config}/pacman/makepkg.conf"
-if [[ -f "$USER_PACMAN_CONF" ]]; then
-    # shellcheck disable=SC1090
-    source "$USER_PACMAN_CONF"
-fi
+# # 加载 makepkg 配置
+# shellcheck disable=SC1090,SC1091
+for conf in /etc/makepkg.conf /etc/makepkg.conf.d/*.conf "${XDG_CONFIG_HOME:-$HOME/.config}/pacman/makepkg.conf"; do
+    [[ -f "$conf" ]] && source "$conf"
+done
 
 sync_repo() {
     local repo_url="$1"
@@ -37,21 +26,18 @@ sync_repo() {
     echo ">>> 正在同步：$repo_url @ $version"
 
     if [[ ! -d "$repo_path/.git" ]]; then
-		echo ">>>> 初始化：$repo_path"
-
-        rm -rf "$repo_path"
-		mkdir -p "$(dirname "$repo_path")"
-        git init "$repo_path" --quiet
+        echo ">>>> 初始化：$repo_path"
+        mkdir -p "$repo_path"
+        git -C "$repo_path" init --quiet
         git -C "$repo_path" remote add origin "$repo_url"
+    else
+        git -C "$repo_path" clean -ffdx --quiet
+        git -C "$repo_path" reset --hard HEAD --quiet 2>/dev/null || true
     fi
 
-	# 清理
-    git -C "$repo_path" clean -ffdx --quiet
-    git -C "$repo_path" reset --hard HEAD --quiet 2>/dev/null || true
-
-	# 同步
-    git -C "$repo_path" fetch origin "$version" --quiet || { echo "错误：无法获取版本 $version"; exit 1; }
-    git -C "$repo_path" reset --hard FETCH_HEAD --quiet || { echo "错误：重置失败"; exit 1; }
+    # 同步
+    git -C "$repo_path" fetch origin "$version" --quiet || { echo "错误：无法获取版本 $version" >&2; return 1; }
+    git -C "$repo_path" reset --hard FETCH_HEAD --quiet || { echo "错误：重置失败" >&2; return 1; }
 
     # 回收
     git -C "$repo_path" gc --prune=now --quiet
