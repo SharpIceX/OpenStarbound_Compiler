@@ -12,12 +12,6 @@ deps_OpenStarbound=(
     "$SCRIPT_DIR/source/OpenStarbound"
 )
 
-# # 加载 makepkg 配置
-# shellcheck disable=SC1090,SC1091
-for conf in /etc/makepkg.conf /etc/makepkg.conf.d/*.conf "${XDG_CONFIG_HOME:-$HOME/.config}/pacman/makepkg.conf"; do
-    [[ -f "$conf" ]] && source "$conf"
-done
-
 sync_repo() {
     local repo_url="$1"
     local version="$2"
@@ -63,15 +57,19 @@ pack_asset() {
 
 export CC=clang
 export CXX=clang++
+export LD=ld.lld
+export AR=llvm-ar
+export NM=llvm-nm
+export RANLIB=llvm-ranlib
 
-# 编译参数
+# 性能优化与构建参数（针对高性能且稳健的游戏运行配置）
 TOOLCHAIN_ARGS="--gcc-install-dir=/usr/lib/gcc/x86_64-pc-linux-gnu/14.3.1"
-EXTRA_COMPILER_ARGS="-fstrict-vtable-pointers"
+OPTIMIZE_FLAGS="-march=native -mtune=native -O3 -flto=thin -fno-plt -pipe"
 DISABLE_ARGS="-Wno-nan-infinity-disabled -Wno-error=incompatible-pointer-types-discards-qualifiers"
 
-export CFLAGS="${CFLAGS:-} ${TOOLCHAIN_ARGS} ${EXTRA_COMPILER_ARGS} ${DISABLE_ARGS}"
-export CXXFLAGS="${CXXFLAGS:-} ${TOOLCHAIN_ARGS} ${EXTRA_COMPILER_ARGS} ${DISABLE_ARGS} -std=c++20 -D_GLIBCXX_USE_CXX11_ABI=1 -U_GLIBCXX_ASSERTIONS"
-export LDFLAGS="${LDFLAGS:-} ${TOOLCHAIN_ARGS} -Wl,--gc-sections -Wl,--icf=all"
+export CFLAGS="${TOOLCHAIN_ARGS} ${OPTIMIZE_FLAGS} ${DISABLE_ARGS}"
+export CXXFLAGS="${TOOLCHAIN_ARGS} ${OPTIMIZE_FLAGS} ${DISABLE_ARGS} -std=c++20 -D_GLIBCXX_USE_CXX11_ABI=1 -U_GLIBCXX_ASSERTIONS"
+export LDFLAGS="${TOOLCHAIN_ARGS} -fuse-ld=lld -flto=thin -Wl,-O2 -Wl,--gc-sections -Wl,--icf=safe -lmimalloc"
 
 # VcPkg
 export VCPKG_FORCE_SYSTEM_BINARIES=1
@@ -103,7 +101,6 @@ CMAKE_OPTS=(
 cmake "${CMAKE_OPTS[@]}"
 
 echo ">编译 OpenStarbound 使用「$NPROC」核心"
-export LDFLAGS="$LDFLAGS -lmimalloc"
 cmake --build "$SCRIPT_DIR/obj/OpenStarbound" --config Release --parallel "$NPROC"
 
 echo "> 复制 OpenStarbound 编译产物"
